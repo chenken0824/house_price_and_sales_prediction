@@ -1,0 +1,16 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+data = np.load(r'...')
+sales = data[:,:119]
+sales_df = pd.DataFrame(sales, index=None)
+index = data[:, 119:138]
+index_df = pd.DataFrame(index, index=None)
+rank = data[:, 138]
+rank_df = pd.DataFrame(rank, index=None)
+N = sales.shape[0]
+
+sales_df2 = sales_df[list(range(19))]
+combine_corr = pd.concat([sales_df2, index_df], axis=1).corr()
+plt.matshow(combine_corr)
