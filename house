@@ -1,0 +1,172 @@
+import tensorflow as tf
+import numpy as np
+import simpleNN
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+
+def run(month, num):
+    # load the processed data
+    sz = np.load('./dataset/shenzhen.npy')
+    fill = False
+    sz = sz.astype(float)
+    price = sz[:,2:26]
+    N = price.shape[0]
+    feature = np.zeros((N,5))
+    for r in range(N):
+        feature[r,0] = sz[r,0]
+        feature[r,1] = sz[r,1]
+        feature[r,2] = sz[r,-3]
+        feature[r,3] = sz[r,-2]
+        feature[r,4] = sz[r,-1]
+    scale = []
+    
+    # normalize the price
+    for r in range (N):
+        scale.append(np.max(price[r,:]))
+        if (np.max(price[r,:]) != 0):
+            price[r, :] = price[r, :] / np.max(price[r, :])
+    
+    # fill the zero values with the predicted values
+    if (fill==True):
+        lr_data = np.load('lr_house.npy')
+        for r in range(N):
+            for c in range(1,lr_data.shape[1]):
+                if (price[r,lr_data.shape[1]-c]==0) and (price[r,lr_data.shape[1]-c-1]!=0):
+                    price[r,lr_data.shape[1]-1-c] = lr_data[r,c]
+    
+    
+    input_data = []
+    output = []
+    input_lr = []
+    # construct the training data
+    for r in range (N):
+        for c in range (num, price.shape[1]-month):
+            if price[r,c] > 0 and price[r, c-1] > 0:
+                temp = np.zeros(num+5)
+                for l in range(num,0,-1):
+                    temp[l] = price[r,c-l]
+                temp[-5:] = feature[r,:]
+                input_data.append(temp)
+                lr_input = np.hstack((temp[:-5], temp[-5:]))
+                output.append([price[r,c]])
+#                input_arr = np.concatenate([np.array([price[r,c-1]]).T, feature[r,:]])
+#                input_data.append(input_arr)
+#                output.append([price[r,c]])
+#                lr_input = np.hstack((price[r,c-1], feature[r,:]))
+                input_lr.append(lr_input)
+
+    input = np.array(input_data)
+    output = np.array(output)
+    output = output.reshape((-1, 1))
+    
+    test_input = [] 
+    test_output = []
+    test_lr = []
+    
+    for r in range(price.shape[0]):
+        temp = np.zeros(num+5)
+        for l in range(num,0,-1):
+            temp[l] = price[r, price.shape[1]-month-l]
+        temp[-5:] = feature[r,:]
+        test_input.append(temp)
+#        test_input.append([sales[r,month], sales[r,month+1], index[r,month], index[r, month+1], rank[r]])
+#        test_arr = np.concatenate([np.array([price[r, month-1]]).T, feature[r,:]])
+#        test_input.append(test_arr)
+        test_output.append([price[r,price.shape[1]-month]])
+        lr_test = np.hstack((temp[:-5], temp[-5:]))
+        test_lr.append(lr_test)
+
+    
+    test = np.array(test_input)
+    predict = np.array(test_output)
+    predict = predict.reshape((-1, 1))
+       
+    train_x = input[:, :]
+    train_y = output[:, :]
+    test_x = test[:, :]
+    test_y = predict[:, :]
+    
+    train_lrx = np.array(input_lr)
+    test_lrx = np.array(test_lr)
+    
+    # Linear regression model   
+    lr = LinearRegression()
+    lr.fit(train_lrx, train_y)
+    test_predict = lr.predict(test_lrx)
+    combine = np.concatenate((test_predict, test_y), axis=1)
+    print(combine)
+    print(mean_squared_error(test_predict, test_y)) 
+#    print(sklearn.metrics.r2_score(test_y, test_predict))
+    lr_error = mean_squared_error(test_predict, test_y)
+
+    # Neural network model
+    nn = simpleNN.simpleNN(numFeatures=train_x.shape[1], hidden_size=300)
+    sess = tf.InteractiveSession()
+    nn.training(sess, epochs=2000, batch_size= 500, data=train_x, output=train_y)
+
+    [price, testError] = nn.testing(sess, data=test_x, output=test_y)
+    print(testError)
+    compare = np.concatenate((price, test_y), axis=1)
+    print(compare)
+#    print(sklearn.metrics.r2_score(test_y, price))
+    print(np.mean(price*scale))
+
+#    mlp = MLPRegressor(hidden_layer_sizes=(200,2), activation='identity', solver='lbfgs',max_iter=500,learning_rate_init=0.1)
+#    mlp.fit(train_lrx,np.ravel(train_y,-1))
+#    price = mlp.predict(test_lrx)
+#    price = price.reshape((-1,1))
+#    combine2 = np.concatenate((price, test_y),axis=1)
+#    print(combine2)
+#    print(mean_squared_error(price, test_y)) 
+#    print(sklearn.metrics.r2_score(test_y, price))
+#    nn_error = mean_squared_error(price,test_y)
+
+    return [price, test_y, testError, lr_error, test_predict, scale]
+    
+
+
+if __name__ == "__main__":
+    
+    # predict the recent 1 years' house price
+    error_lr = []
+    error_nn = []
+    num = 6
+    [nn0, actual0, nn_error0, lr_error0, lr0, scale] = run(1,num)
+    combine_lr = lr0
+    combine_predict = nn0
+    combine_actual = actual0
+    error_lr.append([lr_error0])
+    error_nn.append([nn_error0])
+       
+    
+    for m in range(2, 13):
+        [nn, actual, nn_error, lr_error, lr, scale] = run(m,num)
+        combine_lr = np.concatenate((combine_lr,lr), axis=1)
+        combine_predict = np.concatenate((combine_predict, nn), axis=1)
+        combine_actual = np.concatenate((combine_actual, actual), axis=1)
+        error_lr.append([lr_error])
+        error_nn.append([nn_error])
+    
+    np.savetxt('lr.csv', combine_lr, delimiter=',')
+    np.savetxt('predict.csv', combine_predict, delimiter=',')
+    np.savetxt('actual.csv', combine_actual, delimiter=',')
+    np.savetxt('lr_error.csv', error_lr, delimiter=',')
+    np.savetxt('nn_error.csv', error_nn, delimiter=',')
+    np.savetxt('scale_house.csv', scale, delimiter=',')
+       
+#    for m in range(13, 2, -1):
+#        [lr, predict, actual] = run(m)
+#        combine_lr = np.concatenate((combine_lr, lr), axis=1)
+#        combine_predict = np.concatenate((combine_predict, predict), axis=1)
+#        combine_actual = np.concatenate((combine_actual, actual), axis=1)
+    
+#    np.save('lr.npy', combine_lr)
+#    np.savetxt('lr.csv', combine_lr, delimiter=',')
+#    np.savetxt('predict.csv', combine_predict, delimiter=',')
+#    np.savetxt('actual.csv', combine_actual, delimiter=',')
+#    [lr,predict, actual] = run(3)
+#    predict = np.array(predict_list)
+#    actual = np.array(actual_list)
+#    np.savetxt('predict14.csv', predict)
+#    np.savetxt('actual14.csv', actual)
