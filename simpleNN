@@ -1,0 +1,60 @@
+import tensorflow as tf
+import numpy as np
+
+
+
+class simpleNN:
+
+    def __init__(self, numFeatures, hidden_size):
+        self.initialize = False
+        self.x = tf.placeholder(tf.float32, shape=[None, numFeatures])
+        self.t = tf.placeholder(tf.float32, shape=[None, 1])
+
+        self.w1 = tf.Variable( tf.truncated_normal(shape=[numFeatures, hidden_size], stddev=0.1) )
+        self.b1 = tf.Variable( tf.constant(0.1, shape=[hidden_size]))
+        
+        self.w2 = tf.Variable( tf.truncated_normal(shape=[hidden_size, hidden_size], stddev=0.1) )
+        self.b2 = tf.Variable( tf.constant(0.1, shape=[hidden_size]))
+
+        self.w3 = tf.Variable(tf.truncated_normal(shape=[hidden_size, 1], stddev=0.1))
+        self.b3 = tf.Variable(tf.constant(0.1, shape=[1]))
+
+
+    def build_model(self):
+        h = tf.nn.relu(tf.matmul(self.x, self.w1) + self.b1)
+        h2 = tf.nn.relu(tf.matmul(h, self.w2) + self.b2)
+        self.y = tf.matmul(h, self.w3) + self.b3
+
+        self.error = tf.losses.mean_squared_error(self.t, self.y)
+        self.train_step = tf.train.GradientDescentOptimizer(1e-2).minimize(self.error)
+
+
+    def training(self, sess, epochs, batch_size, data, output, show_freq=100):
+        if not self.initialize:
+            self.build_model()
+            sess.run(tf.global_variables_initializer())
+            self.initialize = True
+
+        for i in range(epochs):
+            batch = data
+            batch_output = output
+            if i % show_freq == 0:
+                train_error = self.error.eval(feed_dict={self.x: batch, self.t: batch_output})
+                print('step %d, training mean square error %.4f' % (i, train_error))
+            self.train_step.run(feed_dict={self.x: batch, self.t: batch_output})
+
+    def testing(self, sess, data, output):
+        predict = self.y.eval(feed_dict={self.x: data, self.t: output})
+        testing_error = self.error.eval(feed_dict={self.x: data, self.t: output})
+
+        return [predict, testing_error]
+
+
+def main():
+    sess = tf.InteractiveSession()
+    #nn = simpleNN()
+    #nn.training(sess, )
+
+
+if __name__ == "__main__":
+    main()
