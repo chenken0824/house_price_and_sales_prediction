@@ -1,0 +1,213 @@
+import tensorflow as tf
+import numpy as np
+import simpleNN
+import sklearn
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+
+def run(month, num, fill):
+    # load the processed car sales data
+    data = np.load('dataset.npy')
+    sales = data[:,:119]
+    index = data[:,119:138]
+    rank = data[:,138]
+    N = sales.shape[0] #the total number of car types
+
+    # fill the rank for unfound types of cars with the mean value
+    rank[np.where(rank == 0)] = np.mean(rank[np.nonzero(rank)])
+    # normalize the rank
+    rank = rank - np.mean(rank)
+    rank = rank / np.max(np.abs(rank))
+    
+    # normalize the baidu index to range from 0 to 1
+    index_mean = np.sum(index, axis=1)
+    index_mean = index_mean / np.max(index)   
+    index = index / np.max(index)
+    
+    scale = []
+    
+    for r in range (N):
+        scale.append(np.max(sales[r,:]))
+        sales[r, :] = sales[r, :] / np.max(sales[r, :])
+        
+    target = sales
+    
+    # If filled, filling the zero values whose previous sales are non-zero
+    if (fill == True):
+        lr_data = np.load('lr_461.npy')
+        for r in range(N):
+            for c in range(lr_data.shape[1]-1, -1, -1):
+                if (sales[r,c+2] == 0) and (sales[r,c+3] != 0) :
+                    sales[r,c+2] = lr_data[r,lr_data.shape[1]-1-c]
+   
+
+    lr_train = []
+    output = []
+    input_data = []
+    # construct the training dataset
+    for r in range (N):
+        for c in range (sales.shape[1]-num-1, month, -1):
+            if sales[r,c] > 0 and sales[r, c+1] > 0:
+                if c < 18:
+                    temp = np.zeros(num+2)
+                    for l in range(num):
+                        temp[l] = sales[r,c+1+l]
+                    temp[-2] = index[r,c+1]
+                    temp[-1] = rank[r]
+                    input_data.append(temp)
+                    lr_input = np.hstack((sales[r,c+1:c+num+1], temp[-2], temp[-1]))
+                else:
+                    temp = np.zeros(num+2)
+                    for l in range(num):
+                        temp[l] = sales[r,c+1+l]
+                    temp[-2] = index_mean[r]
+                    temp[-1] = rank[r]
+                    input_data.append(temp)
+                    lr_input = np.hstack((sales[r,c+1:c+num+1], temp[-2], temp[-1]))
+                output.append(target[r,c])
+                lr_train.append(lr_input)
+   
+    input = np.array(input_data)
+    output = np.array(output)
+    output = output.reshape((-1, 1))
+    
+    test_input = []
+    test_output = []
+    lr_test = []
+    
+    for r in range(sales.shape[0]):
+#        test_input.append(sales[r, month:month+12])
+        temp = np.zeros(num+2)
+        for l in range(num):
+            temp[l] = sales[r, month+l]
+        temp[-2] = index[r, month]
+        temp[-1] = rank[r]
+        test_input.append(temp)
+        test_output.append(target[r,month-1])
+        lr_input = np.hstack((sales[r, month:month+num], temp[-2], temp[-1]))
+#        lr_input = np.hstack((sales[r, month:month+12]))
+        lr_test.append(lr_input)
+
+    
+    test = np.array(test_input)
+    predict = np.array(test_output)
+    predict = predict.reshape((-1, 1))
+       
+    train_x = input[:, :]
+    train_y = output[:, :]
+    test_x = test[:, :]
+    test_y = predict[:, :]
+    lr_train = np.array(lr_train)
+    lr_test = np.array(lr_test)
+     
+    # Linear regression model
+    lr = LinearRegression()
+    lr.fit(lr_train, train_y)
+    test_predict = lr.predict(lr_test)
+#    combine = np.concatenate((test_predict, test_y), axis=1)
+#    print(combine)
+    print(mean_squared_error(test_predict, test_y)) 
+    print(sklearn.metrics.r2_score(test_y, test_predict))
+    lr_error = mean_squared_error(test_predict, test_y)
+    
+    # Neural network model
+    nn = simpleNN.simpleNN(numFeatures=num+2, hidden_size=10)
+    sess = tf.InteractiveSession()
+    nn.training(sess, epochs=1000, batch_size= 500, data=train_x, output=train_y)
+
+    [price, testError] = nn.testing(sess, data=test_x, output=test_y)
+    print(testError)
+    compare = np.concatenate((price, test_y), axis=1)
+    print(compare)
+    print(sklearn.metrics.r2_score(test_y, price))
+
+    return [test_predict, price, test_y, testError, lr_error]
+    
+
+
+if __name__ == "__main__":
+    combine_error = []
+    combine_lr_error = []
+    num = 12
+    fill = False
+    [lr0, predict0, actual0, error0, lr_error0] = run(14, num, fill)
+    combine_lr = lr0
+    combine_predict = predict0
+    combine_actual = actual0
+    combine_error.append([error0])
+    combine_lr_error.append([lr_error0])
+    
+    
+    for m in range(13, 2, -1):
+        [lr, predict, actual, error, lr_error] = run(m, num, fill)
+        combine_lr = np.concatenate((combine_lr, lr), axis=1)
+        combine_predict = np.concatenate((combine_predict, predict), axis=1)
+        combine_actual = np.concatenate((combine_actual, actual), axis=1)
+        combine_error.append([error])
+        combine_lr_error.append([lr_error])
+
+'''
+    This code is used to obtain the predicted values used for filling  
+#    combine_MSE = []
+#    fill = False
+#    
+#    for num in range(24, 25):
+#        combine_lr_error = []
+#        [lr_error,test_predict] = run(14, num, fill)
+#        combine_lr_error.append([lr_error])
+#        combine_predict = test_predict
+#        
+#        for m in range(13,2,-1):
+#            [lr_error, test_predict] = run(m,num, fill)
+#            combine_lr_error.append([lr_error])
+#            combine_predict = np.concatenate((combine_predict, test_predict), axis=1)
+#        
+#        mse = np.mean(combine_lr_error)
+#        combine_MSE.append([mse])
+#        fill = True
+#        
+#        if num == 24:
+#            np.save('lr_461.npy', combine_predict)
+#        elif num > 24:
+#            if combine_MSE[-1] <= np.min(combine_MSE) :
+#                np.save('lr_461.npy', combine_predict)
+#                print(num)
+ '''
+            
+'''
+    This code is used to find how many months of data should be considered
+    as features.
+##    
+#    np.savetxt('lr.csv', combine_lr, delimiter=',')
+#    np.savetxt('predict.csv', combine_predict, delimiter=',')
+#    np.savetxt('actual.csv', combine_actual, delimiter=',')
+#    np.savetxt('lr_error.csv', combine_lr_error, delimiter=',')
+#    np.savetxt('nn_error.csv', combine_error, delimiter=',')            
+    
+#    for num in range(1, 118):
+#        [lr0, predict0, actual0, error0, lr_error0] = run(14, num)
+#        combine_lr = lr0
+#        combine_predict = predict0
+#        combine_actual = actual0
+#        combine_error.append([error0])
+#        combine_lr_error.append([lr_error0])
+#       
+#        for m in range(13, 2, -1):
+#            [lr, predict, actual, error, lr_error] = run(m, num)
+#            combine_lr = np.concatenate((combine_lr, lr), axis=1)
+#            combine_predict = np.concatenate((combine_predict, predict), axis=1)
+#            combine_actual = np.concatenate((combine_actual, actual), axis=1)
+#            combine_error.append([error])
+#            combine_lr_error.append([lr_error])
+#        s = str(num)
+#        name1 = ''.join(['lr_result',s])
+#        np.savetxt("%s.csv"% (name1),combine_lr, delimiter=',')
+#        name2 = ''.join(['nn_result',s])
+#        np.savetxt("%s.csv"% (name2),combine_predict, delimiter=',')
+#        name3 = ''.join(['actual_result',s])
+#        np.savetxt("%s.csv"% (name3),combine_actual, delimiter=',')
+#        name4 = ''.join(['nnerror_result',s])
+#        np.savetxt("%s.csv"% (name4),combine_error, delimiter=',')
+#        name5 = ''.join(['lrerror_result',s])
+#        np.savetxt("%s.csv"% (name5),combine_lr_error, delimiter=',')
