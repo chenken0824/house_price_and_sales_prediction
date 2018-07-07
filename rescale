@@ -1,0 +1,89 @@
+import pandas as pd
+import numpy as np
+import csv
+
+#lr = pd.read_csv('lr.csv', header=None)
+#lr = np.array(lr.values.tolist())
+#np.save('lr_house.npy',lr)
+
+nn = pd.read_csv('...',header=None)
+lr = pd.read_csv('...',header=None)
+actual = pd.read_csv('...',header=None)
+scale = pd.read_csv('...',header=None)
+#
+nn = np.array(nn.values.tolist())
+lr = np.array(lr.values.tolist())
+actual = np.array(actual.values.tolist())
+scale = np.array(scale.values.tolist())
+#
+nn = nn * scale
+lr = lr * scale
+actual = actual * scale
+#
+#
+##by = np.load('...')
+bj = np.load('...')
+nn_add = 0
+lr_add = 0
+actual_add = 0
+count = 0
+
+nn_add_list = []
+lr_add_list = []
+actual_add_list = []
+
+nn_mean_list = []
+lr_mean_list = []
+
+nn_re_list = []
+lr_re_list = []
+#
+for num in range(0, 12):
+    for r in range(bj.shape[0]):
+        if bj[r,0] == '17':
+            if actual[r, num] != 0:
+                nn_add += nn[r,num]
+                lr_add += lr[r,num]
+                actual_add += actual[r,num]
+                count += 1
+    nn_add = nn_add/count
+    lr_add = lr_add/count
+    actual_add = actual_add/count
+    nn_add_list.append(nn_add)
+    lr_add_list.append(lr_add)
+    actual_add_list.append(actual_add)
+    
+
+    nn_re = np.mean(abs(nn_add-actual_add)/actual_add)
+    lr_re = np.mean(abs(lr_add-actual_add)/actual_add)
+    
+    nn_re_list.append(nn_re)
+    lr_re_list.append(lr_re)
+
+    nn_mean = np.mean(pow((nn_add-actual_add),2))
+    lr_mean = np.mean(pow((lr_add-actual_add),2))
+    
+    nn_mean_list.append(nn_mean)
+    lr_mean_list.append(lr_mean)
+    
+    
+print('nn_add:', nn_add_list)
+print('lr_add:', lr_add_list)
+print('actual_add:', actual_add_list)
+print('nn_mse:',nn_mean_list)
+print('lr_mse:', lr_mean_list)
+print('nn_re:', nn_re_list)
+print('lr_re:', lr_re_list)
+result = []
+result.append(nn_add_list)
+result.append(lr_add_list)
+result.append(actual_add_list)
+result.append(nn_mean_list)
+result.append(lr_mean_list)
+result.append(nn_re_list)
+result.append(lr_re_list)
+
+#np.savetxt('rescale_result.csv', result, delimiter=',')
+
+with open('rescale_result.csv', 'a') as f_handle:
+    writer = csv.writer(f_handle, lineterminator = '\n')
