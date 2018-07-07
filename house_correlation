@@ -1,0 +1,24 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+house = np.load('beijing.npy')
+house = house.astype(float)
+price = house[:,4:26]
+price_df = pd.DataFrame(price, index=None)
+
+N = price.shape[0]
+
+feature = np.zeros((N,5))
+for r in range(N):
+    feature[r,0] = house[r,0]
+    feature[r,1] = house[r,1]
+    feature[r,2] = house[r,-3]
+    feature[r,3] = house[r,-2]
+    feature[r,4] = house[r,-1]
+
+feature_df = pd.DataFrame(feature, index=None)
+#sales_df2 = sales_df[list(range(19))]
+combine_corr = pd.concat([price_df, feature_df], axis=1).corr()
+plt.matshow(combine_corr)
+#plt.matshow(price_df.corr())
