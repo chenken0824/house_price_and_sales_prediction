@@ -1,0 +1,145 @@
+from __future__ import unicode_literals
+
+import urllib.request
+import gzip
+import io 
+import re
+import urllib.error
+import time
+fh=open("....csv","w")
+fh.write('city,district,name,number,GradeSorce,WuyeGradeSorce,InActiveGradeSorce,EducationGradeSorce,MapBoardGradeSorce,plot_ratio,green_ratio,wuye_type\n')
+for i in range(0,1):
+    try:
+        url="http://esf.fang.com/housing/1__0_0_0_0_"+str(i)+"_0_0_0/"
+        data = urllib.request.urlopen(url)
+        encoding = data.getheader('Content-Encoding')
+        content = data.read()
+        if encoding == 'gzip':
+            buf = io.BytesIO(content)
+            gf = gzip.GzipFile(fileobj=buf)
+            content = gf.read().decode("gb2312","ignore")
+            pat='<a href="(.*?)" target="_blank" class="plotTit">'
+            allurl=re.compile(pat).findall(content)
+            for j in range(0,len(allurl)):
+                try:
+                    print("第"+str(i)+str(j)+"次爬取")
+                    thisurl=allurl[j]
+                    data1 = urllib.request.urlopen(thisurl)
+                    encoding1 = data1.getheader('Content-Encoding')
+                    content1 = data1.read()
+                    if encoding1 == 'gzip':
+                        buf1 = io.BytesIO(content1)
+                        gf1 = gzip.GzipFile(fileobj=buf1)
+                        content1= gf1.read().decode("gb2312","ignore")
+                        pat1='var city = "(.*?)"'
+                        pat2='var district = "(.*?)"'
+                        pat3='<li><strong>房屋总数</strong>(.*?)户</li>'
+                        pat4='var GradeSorce =  "(.*?)"'
+                        pat5='var WuyeGradeSorce =  "(.*?)"'
+                        pat6='var InActiveGradeSorce =  "(.*?)"'
+                        pat7='var EducationGradeSorce =  "(.*?)"'
+                        pat8='var MapBoardGradeSorce =  "(.*?)"'
+                        pat9='<h1><strong>(.*?)</strong></h1>'
+                        city=re.compile(pat1).findall(content1)
+                        district=re.compile(pat2).findall(content1)
+                        name=re.compile(pat9).findall(content1)
+                        number=re.compile(pat3).findall(content1)
+                        GradeSorce=re.compile(pat4).findall(content1)
+                        WuyeGradeSorce=re.compile(pat5).findall(content1)
+                        InActiveGradeSorce=re.compile(pat6).findall(content1)
+                        EducationGradeSorce=re.compile(pat7).findall(content1)
+                        MapBoardGradeSorce=re.compile(pat8).findall(content1)
+                        try:
+                            thisurl1=thisurl+'/xiangqing/'
+                            data2 = urllib.request.urlopen(thisurl1)
+                            encoding2 = data2.getheader('Content-Encoding')
+                            content2 = data2.read()
+                            if encoding2 == 'gzip':
+                                buf2 = io.BytesIO(content2)
+                                gf2 = gzip.GzipFile(fileobj=buf2)
+                                content2= gf2.read().decode("gb2312","ignore")
+                                pat10='<dd><strong>容 积 率：</strong>(.*?)</dd>'
+                                pat11='<dd><strong>绿 化 率：</strong>(.*?)</dd>'
+                                pat12='<dd><strong>物业类别：</strong>(.*?)</dd>'
+                                plot_ratio=re.compile(pat10).findall(content2)
+                                green_ratio=re.compile(pat11).findall(content2)
+                                wuye_type=re.compile(pat12).findall(content2)
+                            print(city,district,name,number,GradeSorce,WuyeGradeSorce,InActiveGradeSorce,EducationGradeSorce,MapBoardGradeSorce,plot_ratio,green_ratio,wuye_type)
+                            if city:
+                                fh.write(city[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if district:
+                                fh.write(district[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if name:
+                                fh.write(name[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if number:
+                                fh.write(number[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if GradeSorce:
+                                fh.write(GradeSorce[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if WuyeGradeSorce:
+                                fh.write(WuyeGradeSorce[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if InActiveGradeSorce:
+                                fh.write(InActiveGradeSorce[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if EducationGradeSorce:
+                                fh.write(EducationGradeSorce[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if MapBoardGradeSorce:
+                                fh.write(MapBoardGradeSorce[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if plot_ratio:
+                                fh.write(plot_ratio[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if green_ratio:
+                                fh.write(green_ratio[0])
+                                fh.write(',')
+                            else:
+                                fh.write(',')
+                            if wuye_type:
+                                fh.write(wuye_type[0])
+                                fh.write('\n')
+                            else:
+                                fh.write('\n')
+                        except urllib.error.URLError as e:
+                            if hasattr(e,"code"):
+                                print(e.code)
+                            if hasattr(e,"reason"):
+                                print(e.reason)
+                except urllib.error.URLError as e:
+                    if hasattr(e,"code"):
+                        print(e.code)
+                    if hasattr(e,"reason"):
+                        print(e.reason)
+               for a in range(10):
+                    time.sleep(a)
+    except urllib.error.URLError as e:
+        if hasattr(e,"code"):
+            print(e.code)
+        if hasattr(e,"reason"):
+            print(e.reason) 
+fh.close()                 
