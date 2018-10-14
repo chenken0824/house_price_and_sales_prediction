@@ -1,0 +1,65 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Oct 14 19:05:43 2018
+
+@author: chenk
+"""
+
+import urllib.request
+import re
+import pandas as pd
+#爬取城市的url
+url="https://m.anjuke.com/cityList/"
+data=urllib.request.urlopen(url).read().decode("utf-8","ignore")
+pat='<li class="cl-c-l-li"><a href="https://m.anjuke.com/(.*?)/">.*?</a></li>'
+city_list=re.compile(pat).findall(data)
+city_list=set(city_list)
+#爬取小区url(一共100页)和小区名字，areas，板块，地址,sale_num,建造年代
+for city in city_list:
+    areas=[]
+    plate=[]
+    address=[]
+    com_url=[]
+    name=[]
+    sale_num=[]
+    con_date=[]
+    for i in range(1,3):
+        url="https://m.anjuke.com/"+city+"/community/?p="+str(i)
+        headers=("User-Agent","User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
+        opener=urllib.request.build_opener()
+        opener.addheaders=[headers]
+        data=opener.open(url).read().decode("utf-8","ignore")
+        pat='<a href="(.*?)" class="clplpi-lplink2 soj g-press"'
+        tmp=re.compile(pat).findall(data)
+        com_url.extend(tmp)
+        pat='<strong class="g-overflow">(.*?)</strong>'
+        tmp=re.compile(pat).findall(data)
+        name.extend(tmp)
+        pat='<label class="g-overflow" style="display:block;">(.*?) (.*?)&nbsp;(.*?)</label>'
+        adds=re.compile(pat).findall(data)
+        for add in adds:
+            areas.append(add[0])
+            plate.append(add[1])
+            address.append(add[2])
+            pat='<dd>(.*?)套在售</dd>'
+        tmp=re.compile(pat).findall(data)
+        sale_num.extend(tmp)
+        pat='<label class="date">(.*?)</label>'
+        tmp=re.compile(pat).findall(data)
+        con_date.extend(tmp)
+        table=[0]*7
+        table[0]=name
+        table[1]=areas
+        table[2]=plate
+        table[3]=address
+        table[4]=sale_num
+        table[5]=con_date
+        table[6]=com_url
+        table=pd.DataFrame(table)
+        table=table.T
+        table.columns=['name','areas','plate','address','sale_num','con_date','com_url']
+        table.to_csv('".../"+city+".csv"')
+
+
+        
+    
