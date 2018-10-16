@@ -1,0 +1,221 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 16 10:02:47 2018
+
+@author: 01382090
+"""
+
+import re
+import urllib.request
+from time import sleep
+import pandas as pd
+from lxml import etree
+#爬取城市列表
+start_url="https://3g.ganji.com/?a=c&ifid=shouye_chengshi&backURL=xiaoqu/"
+start_page=urllib.request.urlopen(start_url).read().decode("utf-8","ignore")
+pat='<li><a href="/(.*?)/">.*?</a></li>'
+city_list=re.compile(pat).findall(start_page)
+#爬取每个城市小区首页的信息,包括小区名，城市，价格，环比上月上涨或是下跌的百分比
+name=[]
+price=[]
+city=[]
+per=[]
+url_key=[]
+for city in city_list:
+    for i in range(1,3):
+        url='https://3g.ganji.com/bj_xiaoqu/?page='+str(i)
+        #浏览器伪装
+        headers=("User-Agent","User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
+        opener=urllib.request.build_opener()
+        opener.addheaders=[headers]
+        page=opener.open(url).read().decode("utf-8","ignore")
+        #name
+        pat='<h4 class="house-name">(.*?)</h4>'
+        tmp=re.compile(pat).findall(page)
+        name.extend(tmp)
+        #city
+        pat='name="keywords" content="(.*?)小区,{.*?}楼盘,.*?房价" />'
+        tmp1=re.compile(pat).findall(page)
+        tmp1=tmp1*len(tmp)
+        city.extend(tmp1)
+        #price
+        pat='<b>(.*?)</b>元/㎡'
+        tmp=re.compile(pat).findall(page)
+        price.extend(tmp)
+        #环比上月
+        pat='<span class="house-trend">(.*?)</i></span>'
+        tmp=re.compile(pat).findall(page)
+        for i in range(len(tmp)):
+            if len(tmp[i])==5:
+                tmp[i]='0'+'%'
+            elif tmp[i][15]=='u':
+                if tmp[i][20]>'9' or tmp[i][20]<'0':
+                    tmp[i]=tmp[i][19]+'%'
+                else:
+                    tmp[i]=tmp[i][19:21]+'%'
+            else:
+                if tmp[i][22]>'9' or tmp[i][22]<'0':
+                    tmp[i]='-'+tmp[i][21]+'%'
+                else:
+                    tmp[i]='-'+tmp[i][21:23]+'%'
+        per.extend(tmp)
+        #小区详情页的url的关键字段
+        pat='<a href="./(.*?)/" class="infor infor-community">'
+        tmp=re.compile(pat).findall(page)
+        url_key.extend(tmp)
+        #沉睡10秒
+        sleep(10)
+table=[0]*5
+table[0]=name
+table[1]=city
+table[2]=price
+table[3]=per
+table[4]=url_key
+table=pd.DataFrame(table)
+table=table.T
+table.columns=['name','city','avg_price','环比上月','url_key']
+#爬取小区详情页
+detail_table={}
+for i in range(len(table)):
+    url='https://3g.ganji.com/bj_xiaoqu/'+table['url_key'][i]
+    #浏览器伪装
+    headers=("User-Agent","User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
+    opener=urllib.request.build_opener()
+    opener.addheaders=[headers]
+    page=opener.open(url).read().decode("utf-8","ignore")
+    #地址
+    pat='<span>详细地址 ：</span>(.*?)</p>'
+    address=re.compile(pat).findall(page)
+    address=address[0]
+    if 'address' not in detail_table:
+        detail_table['address']=[address]
+    else:
+        detail_table['address'].append(address)
+    #竣工时间
+    pat='<p><span>竣工时间 ：</span>(.*?)年</p>'
+    date=re.compile(pat).findall(page)
+    if date:
+        date=date[0]
+    else:
+        date=None
+    if 'date' not in detail_table:
+        detail_table['date']=[date]
+    else:
+        detail_table['date'].append(date)
+    #物业类型
+    pat='<p><span>物业类型 ：</span>(.*?)</p>'
+    com_type=re.compile(pat).findall(page)
+    if com_type:
+        com_type=com_type[0]
+    else:
+        com_type=None
+    if 'com_type' not in detail_table:
+        detail_table['com_type']=[com_type]
+    else:
+        detail_table['com_type'].append(com_type)
+    #物业公司
+    pat='<p><span>物业公司 ：</span>(.*?)</p>'
+    com=re.compile(pat).findall(page)
+    if com:
+        com=com[0]
+    else:
+        com=None
+    if 'com' not in detail_table:
+        detail_table['com']=[com]
+    else:
+        detail_table['com'].append(com)
+    #物业费
+    pat='<p><span>物业费 ：</span>(.*?)元/平方米/月</p>'
+    com_fee=re.compile(pat).findall(page)
+    if com_fee:
+        com_fee=com_fee[0]
+    else:
+        com_fee=None
+    if 'com_fee' not in detail_table:
+        detail_table['com_fee']=[com_fee]
+    else:
+        detail_table['com_fee'].append(com_fee)
+    #容积率
+    pat='<p><span>容积率 ：</span>(.*?)</p>'
+    plot_ratio=re.compile(pat).findall(page)
+    if plot_ratio:
+        plot_ratio=plot_ratio[0]
+    else:
+        plot_ratio=None
+    if 'plot_ratio' not in detail_table:
+        detail_table['plot_ratio']=[plot_ratio]
+    else:
+        detail_table['plot_ratio'].append(plot_ratio)
+    #绿化率
+    pat='<p><span>绿化率 ：</span>(.*?)</p>'
+    green_ratio=re.compile(pat).findall(page)
+    if green_ratio:
+        green_ratio=green_ratio[0]
+    else:
+        green_ratio=None
+    if 'green_ratio' not in detail_table:
+        detail_table['green_ratio']=[green_ratio]
+    else:
+        detail_table['green_ratio'].append(green_ratio)
+    #开发商
+    pat='<p><span>开发商 ：</span>(.*?)</p>'
+    developer=re.compile(pat).findall(page)
+    if developer:
+        developer=developer[0]
+    else:
+        developer=None
+    if 'developer' not in detail_table:
+        detail_table['developer']=[developer]
+    else:
+        detail_table['developer'].append(developer)
+    #停车位
+    pat='<span>停车位 ：</span>(.*?)</p>'
+    parking=re.compile(pat).findall(page)
+    if parking:
+        parking=parking[0]
+    else:
+        parking=None
+    if 'parking' not in detail_table:
+        detail_table['parking']=[parking]
+    else:
+        detail_table['parking'].append(parking)    
+    page=etree.HTML(page)
+    #小区名
+    name=page.xpath('//div[@class="house-detail-head clear"]/h2')[0].text
+    if 'name' not in detail_table:
+        detail_table['name']=[name]
+    else:
+        detail_table['name'].append(name)
+    #url
+    if 'url' not in detail_table:
+        detail_table['url']=[url]
+    else:
+        detail_table['url'].append(url)
+    #在售数量
+    tmp=page.xpath('//a[@class="btn-default fl"]')
+    if tmp:
+        tmp=tmp[0].text
+        sale_num=tmp[3:-1]
+    else:
+        sale_num=0
+    sale_num=tmp[3:-1]
+    if 'sale_num' not in detail_table:
+        detail_table['sale_num']=[sale_num]
+    else:
+        detail_table['sale_num'].append(sale_num)
+    #在租数量
+    tmp=page.xpath('//a[@class="btn-default fr "]')
+    if tmp:
+        tmp=tmp[0].text
+        rent_num=tmp[3:-1]
+    else:
+        rent_num=0
+    if 'rent_num' not in detail_table:
+        detail_table['rent_num']=[rent_num]
+    else:
+        detail_table['rent_num'].append(rent_num)
+detail_table=pd.DataFrame(detail_table)
+
+
+        
+    
