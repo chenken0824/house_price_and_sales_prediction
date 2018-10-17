@@ -1,0 +1,456 @@
+import re
+import urllib.request
+from time import sleep
+import pandas as pd
+from lxml import etree
+import datetime
+import urllib.error
+import random
+
+#从首页爬取城市域名
+def crawl_city_list(start_url,pat):
+    start_page=urllib.request.urlopen(start_url).read().decode("utf-8","ignore")
+    city_list=re.compile(pat).findall(start_page)
+    
+    return city_list
+
+#默认沉睡时间10秒,默认超时设置1秒
+def pre_info(proxy_list,city_list,wait=10,overtime=1):
+    name=[]
+    price=[]
+    com_city=[]
+    per=[]
+    url_key=[]
+    for city in city_list:
+        for i in range(1,176):
+            try:
+                url='https://3g.ganji.com/'+city+'/?page='+str(i)
+                #定义代理ip
+                ip=random.randint(0,len(proxy_list)-1)
+                proxy_addr=proxy_list[ip]
+                #创建一个请求
+                req=urllib.request.Request(url)
+                #添加headers
+                req.add_header("User-Agent","User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
+                #设置代理
+                proxy=urllib.request.ProxyHandler({"http":proxy_addr})
+                #创建一个opener
+                opener=urllib.request.build_opener(proxy,urllib.request.HTTPHandler)
+                #将opener安装为全局
+                urllib.request.install_opener(opener)
+                #用urlopen打开网页
+                page=urllib.request.urlopen(req,timeout=overtime).read().decode('utf-8','ignore')
+                #name
+                pat='<h4 class="house-name">(.*?)</h4>'
+                tmp=re.compile(pat).findall(page)
+                name.extend(tmp)
+                #city
+                pat='name="keywords" content="(.*?)小区,{.*?}楼盘,.*?房价" />'
+                tmp1=re.compile(pat).findall(page)
+                tmp1=tmp1*len(tmp)
+                com_city.extend(tmp1)
+                #price
+                pat='<b>(.*?)</b>元/㎡'
+                tmp=re.compile(pat).findall(page)
+                price.extend(tmp)
+                #环比上月
+                pat='<span class="house-trend">(.*?)</i></span>'
+                tmp=re.compile(pat).findall(page)
+                for i in range(len(tmp)):
+                    if len(tmp[i])==5:
+                        tmp[i]='0'+'%'
+                    elif tmp[i][15]=='u':
+                        if tmp[i][20]>'9' or tmp[i][20]<'0':
+                            tmp[i]=tmp[i][19]+'%'
+                        else:
+                            tmp[i]=tmp[i][19:21]+'%'
+                    else:
+                        if tmp[i][22]>'9' or tmp[i][22]<'0':
+                            tmp[i]='-'+tmp[i][21]+'%'
+                        else:
+                            tmp[i]='-'+tmp[i][21:23]+'%'
+                per.extend(tmp)
+                #小区详情页的url的关键字段
+                pat='<a href="./(.*?)/" class="infor infor-community">'
+                tmp=re.compile(pat).findall(page)
+                url_key.extend(tmp)
+                #沉睡
+                sleep(wait)
+            except urllib.error.URLError as e:
+                if hasattr(e,"code"):
+                    print(e.code)
+                if hasattr(e,"reason"):
+                    print(e.reason)
+    table=[0]*5
+    table[0]=name
+    table[1]=com_city
+    table[2]=price
+    table[3]=per
+    table[4]=url_key
+    table=pd.DataFrame(table)
+    table=table.T
+    table.columns=['name','city','avg_price','环比上月','url_key']
+    return table
+
+def peitao(name,page):
+    pat=u'<li><a><span>\['+name+']</span>(.*?)</a>'
+    res=re.compile(pat).findall(page)
+    res_num=len(res)
+    return res,res_num
+
+#爬取小区详情页
+def detail_info(key_list,proxy_list,wait=10,overtime=1):
+    detail_table={}
+    for i in range(len(key_list)):
+    #for i in range(len(pre_info)):
+        try:
+            url='https://3g.ganji.com/bj_xiaoqu/'+key_list[i]
+            #定义代理ip
+            ip=random.randint(0,len(proxy_list)-1)
+            proxy_addr=proxy_list[ip]
+            #创建一个请求
+            req=urllib.request.Request(url)
+            #添加headers
+            req.add_header("User-Agent","User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
+            #设置代理
+            proxy=urllib.request.ProxyHandler({"http":proxy_addr})
+            #创建一个opener
+            opener=urllib.request.build_opener(proxy,urllib.request.HTTPHandler)
+            #将opener安装为全局
+            urllib.request.install_opener(opener)
+            #用urlopen打开网页
+            page=urllib.request.urlopen(req,timeout=overtime).read().decode('utf-8','ignore')
+            #地址
+            pat='<span>详细地址 ：</span>(.*?)</p>'
+            address=re.compile(pat).findall(page)
+            address=address[0]
+            if 'address' not in detail_table:
+                detail_table['address']=[address]
+            else:
+                detail_table['address'].append(address)
+            #竣工时间
+            pat='<p><span>竣工时间 ：</span>(.*?)年</p>'
+            date=re.compile(pat).findall(page)
+            if date:
+                date=date[0]
+            else:
+                date=None
+            if '竣工时间' not in detail_table:
+                detail_table['竣工时间']=[date]
+            else:
+                detail_table['竣工时间'].append(date)
+            #物业类型
+            pat='<p><span>物业类型 ：</span>(.*?)</p>'
+            com_type=re.compile(pat).findall(page)
+            if com_type:
+                com_type=com_type[0]
+            else:
+                com_type=None
+            if '物业类型' not in detail_table:
+                detail_table['物业类型']=[com_type]
+            else:
+                detail_table['物业类型'].append(com_type)
+            #物业公司
+            pat='<p><span>物业公司 ：</span>(.*?)</p>'
+            com=re.compile(pat).findall(page)
+            if com:
+                com=com[0]
+            else:
+                com=None
+            if '物业公司' not in detail_table:
+                detail_table['物业公司']=[com]
+            else:
+                detail_table['物业公司'].append(com)
+            
+            
+            #物业费
+            pat='<p><span>物业费 ：</span>(.*?)元/平方米/月</p>'
+            com_fee=re.compile(pat).findall(page)
+            if com_fee:
+                com_fee=com_fee[0]
+            else:
+                com_fee=None
+            if '物业费' not in detail_table:
+                detail_table['物业费']=[com_fee]
+            else:
+                detail_table['物业费'].append(com_fee)
+            #容积率
+            pat='<p><span>容积率 ：</span>(.*?)</p>'
+            plot_ratio=re.compile(pat).findall(page)
+            if plot_ratio:
+                plot_ratio=plot_ratio[0]
+            else:
+                plot_ratio=None
+            if '容积率' not in detail_table:
+                detail_table['容积率']=[plot_ratio]
+            else:
+                detail_table['容积率'].append(plot_ratio)
+            #绿化率
+            pat='<p><span>绿化率 ：</span>(.*?)</p>'
+            green_ratio=re.compile(pat).findall(page)
+            if green_ratio:
+                green_ratio=green_ratio[0]
+            else:
+                green_ratio=None
+            if '绿化率' not in detail_table:
+                detail_table['绿化率']=[green_ratio]
+            else:
+                detail_table['绿化率'].append(green_ratio)
+            #开发商
+            pat='<p><span>开发商 ：</span>(.*?)</p>'
+            developer=re.compile(pat).findall(page)
+            if developer:
+                developer=developer[0]
+            else:
+                developer=None
+            if '开发商' not in detail_table:
+                detail_table['开发商']=[developer]
+            else:
+                detail_table['开发商'].append(developer)
+            #停车位
+            pat='<span>停车位 ：</span>(.*?)</p>'
+            parking=re.compile(pat).findall(page)
+            if parking:
+                parking=parking[0]
+            else:
+                parking=None
+            if '停车位' not in detail_table:
+                detail_table['停车位']=[parking]
+            else:
+                detail_table['停车位'].append(parking)
+            #公交
+            name='公交'
+            bus,bus_num=peitao(name,page)
+            if not bus:
+                bus=None
+                bus_num=0
+            if name not in detail_table:
+                detail_table[name]=[bus]
+            else:
+                detail_table[name].append(bus)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[bus_num]
+            else:
+                detail_table[name+'数量'].append(bus_num)
+            #地铁
+            name='地铁'
+            subway,subway_num=peitao(name,page)
+            if not subway:
+                subway=None
+                subway_num=0
+            if name not in detail_table:
+                detail_table[name]=[subway]
+            else:
+                detail_table[name].append(subway)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[subway_num]
+            else:
+                detail_table[name+'数量'].append(subway_num)
+
+            #幼儿园
+            name='幼儿园'
+            kinde,kinde_num=peitao(name,page)
+            if not kinde:
+                kinde=None
+                kinde_num=0
+            if name not in detail_table:
+                detail_table[name]=[kinde]
+            else:
+                detail_table[name].append(kinde)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[kinde_num]
+            else:
+                detail_table[name+'数量'].append(kinde_num)
+            #小学
+            name='小学'
+            pri_school,pri_school_num=peitao(name,page)
+            if not pri_school:
+                pri_school=None
+                pri_school_num=0
+            if name not in detail_table:
+                detail_table[name]=[pri_school]
+            else:
+                detail_table[name].append(pri_school)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[pri_school_num]
+            else:
+                detail_table[name+'数量'].append(pri_school_num)       
+            #中学
+            name='中学'
+            mid_school,mid_school_num=peitao(name,page)
+            if not mid_school:
+                mid_school=None
+                mid_school_num=0
+            if name not in detail_table:
+                detail_table[name]=[mid_school]
+            else:
+                detail_table[name].append(mid_school)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[mid_school_num]
+            else:
+                detail_table[name+'数量'].append(mid_school_num)
+            #大学
+            name='学校'
+            school,school_num=peitao(name,page)
+            if not school:
+                school=None
+                school_num=0
+            if '大学' not in detail_table:
+                detail_table['大学']=[school]
+            else:
+                detail_table['大学'].append(school)
+            if '大学数量' not in detail_table:
+                detail_table['大学数量']=[school_num]
+            else:
+                detail_table['大学数量'].append(school_num)
+            #餐饮
+            name='餐饮'
+            res,res_num=peitao(name,page)
+            if not res:
+                res=None
+                res_num=0
+            if name not in detail_table:
+                detail_table[name]=[res]
+            else:
+                detail_table[name].append(res)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[res_num]
+            else:
+                detail_table[name+'数量'].append(res_num)
+                #商场
+            name='商场'
+            shop,shop_num=peitao(name,page)
+            if not shop:
+                shop=None
+                shop_num=0
+            if name not in detail_table:
+                detail_table[name]=[shop]
+            else:
+                detail_table[name].append(shop)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[shop_num]
+            else:
+                detail_table[name+'数量'].append(shop_num)
+            #医院
+            name='医院'
+            hos,hos_num=peitao(name,page)
+            if not hos:
+                hos=None
+                hos_num=0
+            if name not in detail_table:
+                detail_table[name]=[hos]
+            else:
+                detail_table[name].append(hos)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[hos_num]
+            else:
+                detail_table[name+'数量'].append(hos_num)
+            #银行
+            name='银行'
+            bank,bank_num=peitao(name,page)
+            if not bank:
+                bank=None
+                bank_num=0
+            if name not in detail_table:
+                detail_table[name]=[bank]
+            else:
+                detail_table[name].append(bank)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[bank_num]
+            else:
+                detail_table[name+'数量'].append(bank_num)
+            #邮局
+            name='邮局'
+            pos,pos_num=peitao(name,page)
+            if not pos:
+                pos=None
+                pos_num=0
+            if name not in detail_table:
+                detail_table[name]=[pos]
+            else:
+                detail_table[name].append(pos)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[pos_num]
+            else:
+                detail_table[name+'数量'].append(pos_num)    
+            #加油站
+            name='加油站'
+            gas,gas_num=peitao(name,page)
+            if not gas:
+                gas=None
+                gas_num=0
+            if name not in detail_table:
+                detail_table[name]=[gas]
+            else:
+                detail_table[name].append(gas)
+            if name+'数量' not in detail_table:
+                detail_table[name+'数量']=[gas_num]
+            else:
+                detail_table[name+'数量'].append(gas_num)
+            page=etree.HTML(page)
+            #小区名
+            name=page.xpath('//div[@class="house-detail-head clear"]/h2')[0].text
+            if 'name' not in detail_table:
+                detail_table['name']=[name]
+            else:
+                detail_table['name'].append(name)
+            #url
+            if 'url' not in detail_table:
+                detail_table['url']=[url]
+            else:
+                detail_table['url'].append(url)
+            #在售数量
+            tmp=page.xpath('//a[@class="btn-default fl"]')
+            if tmp:
+                tmp=tmp[0].text
+                sale_num=tmp[3:-1]
+            else:
+                sale_num=0
+                sale_num=tmp[3:-1]
+            if 'sale_num' not in detail_table:
+                detail_table['sale_num']=[sale_num]
+            else:
+                detail_table['sale_num'].append(sale_num)
+            #在租数量
+            tmp=page.xpath('//a[@class="btn-default fr "]')
+            if tmp:
+                tmp=tmp[0].text
+                rent_num=tmp[3:-1]
+            else:
+                rent_num=0
+            if 'rent_num' not in detail_table:
+                detail_table['rent_num']=[rent_num]
+            else:
+                detail_table['rent_num'].append(rent_num)
+            #爬取时间
+            crawl_time_key=datetime.datetime.now().strftime('%Y-%m-%d')
+            if 'crawl_time_key' not in detail_table:
+                detail_table['crawl_time_key']=[crawl_time_key]
+            else:
+                detail_table['crawl_time_key'].append(crawl_time_key)
+            sleep(wait)
+        except urllib.error.URLError as e:
+            if hasattr(e,"code"):
+                print(e.code)
+            if hasattr(e,"reason"):
+                print(e.reason)   
+    detail_table=pd.DataFrame(detail_table)
+    return detail_table
+
+def main():
+    start_url="https://3g.ganji.com/?a=c&ifid=shouye_chengshi&backURL=xiaoqu/"
+    pat='<li><a href="/(.*?)/">.*?</a></li>'
+    #设置代理ip列表
+    proxy_list=['10.118.40.40']
+    #爬取城市列表
+    city_list=crawl_city_list(start_url,pat)
+    #爬取每个城市小区首页的信息,包括小区名，城市，价格，环比上月上涨或是下跌的百分比
+    pre_table=pre_info(proxy_list,city_list)
+    #爬取小区详情页
+    key_list=list(pre_table['url_key'])
+    detail_table=detail_info(key_list,proxy_list,wait=10,overtime=1)
+    res=pd.merge(pre_table,detail_table, on = 'name')
+    del res['url_key']
+    return res
+
+res=main()
